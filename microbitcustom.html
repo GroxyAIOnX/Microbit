@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Serial Micro:bit Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .led-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            max-width: 250px;
+            margin: 0 auto;
+        }
+        .led-cell {
+            aspect-ratio: 1;
+            background-color: #e5e7eb;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #d1d5db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #9ca3af;
+        }
+        .led-cell.active {
+            background-color: #ef4444;
+            border-color: #dc2626;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+            color: white;
+        }
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .logic-editor {
+            font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+            background: #0f172a;
+            color: #38bdf8;
+            border: 1px solid #1e293b;
+            resize: none;
+            line-height: 1.6;
+        }
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-md;
+        }
+        .btn-success {
+            @apply bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-xl transition-all shadow-md flex items-center justify-center space-x-2;
+        }
+        .panic-box {
+            background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 10px, #fecaca 10px, #fecaca 20px);
+        }
+        .doc-card {
+            @apply bg-slate-50 border border-slate-200 rounded-2xl p-4 text-[11px] leading-relaxed;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-200 pb-6">
+            <div>
+                <h1 class="text-3xl font-extrabold text-slate-900 mb-2">Micro:bit Commander Pro</h1>
+                <p class="text-slate-500 italic">Advanced Scripting, Animations & Recovery</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2 text-sm bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
+                    <span class="status-dot bg-red-500" id="statusDot"></span>
+                    <span id="statusText" class="font-medium text-slate-700">Disconnected</span>
+                </div>
+                <button id="connectBtn" class="btn-primary">Connect Micro:bit</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Side Menu: Panic & Code -->
+            <aside class="lg:col-span-3 space-y-6">
+                <!-- Documentation Section -->
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200">
+                    <h2 class="text-sm font-bold text-slate-800 mb-3 flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        How to Script
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="doc-card">
+                            <b class="text-blue-600 block mb-1">Triggering Events:</b>
+                            <code>If A is Clicked</code><br>
+                            <code>If B is Clicked</code><br>
+                            <code>If A+B is Clicked</code><br>
+                            <code>If Logo is Touched</code><br>
+                            <code>If Shake is Detected</code>
+                        </div>
+                        <div class="doc-card">
+                            <b class="text-emerald-600 block mb-1">Action Functions:</b>
+                            <code>LightUP(x, y)</code>: Turn on LED<br>
+                            <code>LightOFF(x, y)</code>: Turn off LED<br>
+                            <code>ClearAll()</code>: Wipe screen
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Code Section -->
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200">
+                    <h2 class="text-sm font-bold text-slate-800 mb-3 flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        MakeCode Bridge
+                    </h2>
+                    <div class="relative group">
+                        <textarea readonly id="makecodeText" class="w-full h-36 bg-slate-900 text-slate-400 p-3 rounded-xl text-[9px] font-mono leading-tight focus:outline-none">serial.onDataReceived("!", () => {
+    let c = serial.readUntil("!")
+    let x = parseInt(c.charAt(0))
+    let y = parseInt(c.charAt(1))
+    let s = parseInt(c.charAt(2))
+    if (s == 1) led.plot(x, y)
+    else led.unplot(x, y)
+})
+input.onButtonPressed(Button.A, () => serial.writeLine("EVT:BUTTON_A"))
+input.onButtonPressed(Button.B, () => serial.writeLine("EVT:BUTTON_B"))
+input.onButtonPressed(Button.AB, () => serial.writeLine("EVT:BUTTON_AB"))
+input.onLogoEvent(TouchButtonEvent.Touched, () => serial.writeLine("EVT:LOGO"))
+input.onGesture(Gesture.Shake, () => serial.writeLine("EVT:SHAKE"))</textarea>
+                        <button onclick="copyMakeCode()" class="absolute top-2 right-2 bg-slate-700 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">Copy JS</button>
+                    </div>
+                </div>
+
+                <!-- Panic Mode -->
+                <div class="panic-box p-5 rounded-3xl shadow-sm border-2 border-red-300">
+                    <h2 class="text-sm font-black text-red-700 mb-2 uppercase tracking-tighter flex items-center">
+                        <svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        Panic Room
+                    </h2>
+                    <ol class="text-[10px] text-red-800 space-y-1 list-decimal ml-4 font-medium">
+                        <li>Hold Reset Button</li>
+                        <li>Plug in USB</li>
+                        <li>Drive = MAINTENANCE</li>
+                        <li>Flash new file</li>
+                    </ol>
+                </div>
+            </aside>
+
+            <!-- Logic/Scripting Panel -->
+            <section class="lg:col-span-6 space-y-4">
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-slate-800">Logic & Animations</h2>
+                        <button id="runCodeBtn" class="btn-success text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            </svg>
+                            <span>Run Script</span>
+                        </button>
+                    </div>
+                    
+                    <textarea id="logicEditor" class="logic-editor flex-grow w-full h-[450px] p-4 rounded-2xl mb-4" placeholder="Type logic or animations here...">// Combo Action
+If A+B is Clicked {
+    LightUP(0,2)
+    LightUP(1,2)
+    LightUP(2,2)
+    LightUP(3,2)
+    LightUP(4,2)
+    [300ms]
+    ClearAll()
+}
+
+If A is Clicked LightUP(0,0)
+If B is Clicked LightUP(4,4)
+If Logo is Touched ClearAll()</textarea>
+                </div>
+            </section>
+
+            <!-- Grid Panel -->
+            <section class="lg:col-span-3 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-bold mb-6 text-slate-800 text-center">Monitor</h2>
+                <div class="led-grid mb-8" id="ledGrid"></div>
+                <button id="clearLeds" class="w-full bg-slate-100 py-3 rounded-xl hover:bg-slate-200 transition-colors mb-6 text-sm font-bold text-slate-600">Clear</button>
+                
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 h-64 overflow-y-auto" id="serialOutput">
+                    <h3 class="text-[10px] font-bold text-slate-400 uppercase mb-3 sticky top-0 bg-slate-50">Log</h3>
+                    <div class="text-[10px] font-mono space-y-1"></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // --- LOGIC & ANIMATION ENGINE ---
+        const logicEditor = document.getElementById('logicEditor');
+        const runCodeBtn = document.getElementById('runCodeBtn');
+        let scriptRunning = false;
+
+        runCodeBtn.onclick = () => {
+            scriptRunning = true;
+            runCodeBtn.classList.add('ring-4', 'ring-emerald-200');
+            logSerial("System Armed.", 'system', 'text-emerald-500 font-bold');
+            setTimeout(() => runCodeBtn.classList.remove('ring-4', 'ring-emerald-200'), 500);
+        };
+
+        async function processHardwareEvent(eventType) {
+            if (!scriptRunning) return;
+
+            const text = logicEditor.value;
+            const lines = text.split('\n');
+            let capture = false;
+            let currentSequence = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const rawLine = lines[i].trim();
+                const line = rawLine.toLowerCase();
+                if (!line || line.startsWith('//')) continue;
+
+                const triggerFound = checkTrigger(line, eventType);
+
+                if (triggerFound) {
+                    if (line.includes('{')) {
+                        capture = true;
+                        continue;
+                    } else {
+                        await executeCommand(rawLine);
+                    }
+                }
+
+                if (capture) {
+                    if (line.includes('}')) {
+                        await runSequence(currentSequence);
+                        currentSequence = [];
+                        capture = false;
+                    } else {
+                        currentSequence.push(rawLine);
+                    }
+                }
+            }
+        }
+
+        function checkTrigger(line, eventType) {
+            if (!line.includes('if ')) return false;
+            
+            // Priority check for A+B to avoid misfiring single button triggers
+            if (eventType === 'BUTTON_AB' && line.includes('a+b')) return true;
+            
+            // Standard triggers
+            if (eventType === 'BUTTON_A' && line.includes('if a ') && !line.includes('+')) return true;
+            if (eventType === 'BUTTON_A' && line.includes('if a is')) return true;
+            if (eventType === 'BUTTON_B' && line.includes('if b ') && !line.includes('+')) return true;
+            if (eventType === 'BUTTON_B' && line.includes('if b is')) return true;
+            if (eventType === 'LOGO' && line.includes('if logo')) return true;
+            if (eventType === 'SHAKE' && line.includes('if shake')) return true;
+            return false;
+        }
+
+        async function runSequence(commands) {
+            for (const cmd of commands) {
+                const waitMatch = cmd.match(/\[(\d+)ms\]/i);
+                if (waitMatch) {
+                    const ms = parseInt(waitMatch[1]);
+                    await new Promise(resolve => setTimeout(resolve, ms));
+                } else {
+                    await executeCommand(cmd);
+                }
+            }
+        }
+
+        async function executeCommand(line) {
+            const upMatch = line.match(/LightUP\((\d),(\d)\)/i);
+            if (upMatch) setLedState(parseInt(upMatch[1]), parseInt(upMatch[2]), 1);
+
+            const offMatch = line.match(/LightOFF\((\d),(\d)\)/i);
+            if (offMatch) setLedState(parseInt(offMatch[1]), parseInt(offMatch[2]), 0);
+
+            if (line.toLowerCase().includes('clearall()')) clearAllLeds();
+        }
+
+        function setLedState(x, y, state) {
+            if (x < 0 || x > 4 || y < 0 || y > 4) return;
+            const index = y * 5 + x;
+            const cells = document.querySelectorAll('.led-cell');
+            if (state === 1) cells[index].classList.add('active');
+            else cells[index].classList.remove('active');
+            sendLedCommand(x, y, state);
+        }
+
+        function clearAllLeds() {
+            document.querySelectorAll('.led-cell').forEach(c => c.classList.remove('active'));
+            for(let x=0; x<5; x++) for(let y=0; y<5; y++) sendLedCommand(x,y,0);
+        }
+
+        // --- SERIAL ---
+        let port, writer, reader, keepReading = true;
+        const connectBtn = document.getElementById('connectBtn');
+        const serialOutput = document.getElementById('serialOutput').querySelector('div');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        async function connect() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                writer = port.writable.getWriter();
+                updateUI(true);
+                logSerial("Connected.", "system");
+                readLoop();
+            } catch (err) { logSerial("Connection Failed", "system", "text-red-500"); }
+        }
+
+        async function readLoop() {
+            let buffer = "";
+            while (port.readable && keepReading) {
+                reader = port.readable.getReader();
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        buffer += new TextDecoder().decode(value);
+                        if (buffer.includes("\n")) {
+                            let lines = buffer.split("\n");
+                            buffer = lines.pop();
+                            lines.forEach(line => handleInboundData(line.trim()));
+                        }
+                    }
+                } catch (err) { } 
+                finally { reader.releaseLock(); }
+            }
+        }
+
+        function handleInboundData(data) {
+            if (data.startsWith("EVT:")) {
+                const eventType = data.replace("EVT:", "");
+                processHardwareEvent(eventType);
+                logSerial(data, 'in', 'text-amber-500 font-bold');
+            } else {
+                logSerial(data, 'in');
+            }
+        }
+
+        async function sendLedCommand(x, y, s) {
+            if (!writer) return;
+            const command = `!${x}${y}${s}!`;
+            await writer.write(new TextEncoder().encode(command));
+        }
+
+        function updateUI(connected) {
+            statusDot.className = `status-dot ${connected ? 'bg-green-500' : 'bg-red-500'}`;
+            statusText.innerText = connected ? "Connected" : "Disconnected";
+            connectBtn.innerText = connected ? "Disconnect" : "Connect";
+            connectBtn.onclick = connected ? disconnect : connect;
+        }
+
+        function logSerial(msg, dir = '', colorClass = '') {
+            const prefix = dir === 'in' ? '← ' : (dir === 'system' ? '⚙ ' : '→ ');
+            serialOutput.innerHTML += `<div class="${colorClass}">${prefix}${msg}</div>`;
+            serialOutput.parentElement.scrollTop = serialOutput.parentElement.scrollHeight;
+        }
+
+        function copyMakeCode() {
+            const el = document.getElementById('makecodeText');
+            el.select();
+            document.execCommand('copy');
+        }
+
+        // --- INIT ---
+        const grid = document.getElementById('ledGrid');
+        for (let y = 0; y < 5; y++) {
+            for (let x = 0; x < 5; x++) {
+                const cell = document.createElement('div');
+                cell.className = 'led-cell';
+                cell.innerHTML = `${x},${y}`;
+                cell.onclick = () => {
+                    const isActive = cell.classList.toggle('active');
+                    sendLedCommand(x, y, isActive ? 1 : 0);
+                };
+                grid.appendChild(cell);
+            }
+        }
+        document.getElementById('clearLeds').onclick = clearAllLeds;
+        connectBtn.onclick = connect;
+
+        async function disconnect() {
+            keepReading = false;
+            if (reader) await reader.cancel();
+            if (writer) { writer.releaseLock(); writer = null; }
+            if (port) { await port.close(); port = null; }
+            updateUI(false);
+        }
+    </script>
+</body>
+</html>
